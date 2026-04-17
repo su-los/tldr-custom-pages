@@ -5,7 +5,7 @@
 
 # ── 配置 ──────────────────────────────────────────────────────────────
 CUSTOM_DIR="${1:-$HOME/Codespace/Mkdown/tldr-custom-pages/pages.zh}"
-CACHE_DIR="$HOME/Library/Caches/tlrc/pages.zh/common"
+CACHE_BASE_DIR="$HOME/Library/Caches/tlrc/pages.zh"
 BACKUP_DIR="$HOME/.cache/tlrc/backup"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -25,71 +25,92 @@ if [ ! -d "$CUSTOM_DIR" ]; then
     exit 1
 fi
 
-mkdir -p "$CACHE_DIR"
+mkdir -p "$CACHE_BASE_DIR"
 mkdir -p "$BACKUP_DIR"
 
 # ── 主逻辑 ──────────────────────────────────────────────────────────
 echo "=== tldr 自定义页面同步 ==="
 echo "来源: $CUSTOM_DIR"
-echo "目标: $CACHE_DIR"
+echo "目标: $CACHE_BASE_DIR"
 echo "备份: $BACKUP_DIR"
 echo ""
 
 shopt -s nullglob
-md_files=("$CUSTOM_DIR"/*.md)
 
-if [ ${#md_files[@]} -eq 0 ]; then
-    echo "未找到任何 .md 文件，退出。"
+# 收集所有子目录
+subdirs=()
+for d in "$CUSTOM_DIR"/*/; do
+    [ -d "$d" ] && subdirs+=("$d")
+done
+
+if [ ${#subdirs[@]} -eq 0 ]; then
+    echo "未找到任何子目录，退出。"
     exit 0
 fi
 
-for f in "${md_files[@]}"; do
-    filename=$(basename "$f")
-    target="$CACHE_DIR/$filename"
+for subdir in "${subdirs[@]}"; do
+    subdir_name=$(basename "$subdir")
+    CACHE_DIR="$CACHE_BASE_DIR/$subdir_name"
+    mkdir -p "$CACHE_DIR"
 
-    echo "────────────────────────────────────"
-    echo "处理: $filename"
+    echo "════════════════════════════════════"
+    echo "子目录: $subdir_name  ->  $CACHE_DIR"
 
-    # ── 步骤 1：用 tldr -r 检查合法性 ──────────────────────────────
-    render_output=$(tldr -r "$f" 2>&1)
-    render_exit=$?
+    md_files=("$subdir"*.md)
 
-    if [ $render_exit -ne 0 ]; then
-        echo "  [SKIP] 格式检查失败（exit $render_exit）"
-        echo "         原因: $render_output"
-        count_invalid=$((count_invalid + 1))
+    if [ ${#md_files[@]} -eq 0 ]; then
+        echo "  (无 .md 文件，跳过)"
         continue
     fi
 
-    if [ -z "$render_output" ]; then
-        echo "  [SKIP] 渲染输出为空，文件可能缺少有效内容"
-        count_invalid=$((count_invalid + 1))
-        continue
-    fi
+    for f in "${md_files[@]}"; do
+        filename=$(basename "$f")
+        target="$CACHE_DIR/$filename"
 
-    echo "  [OK]   格式检查通过"
+        echo "────────────────────────────────────"
+        echo "处理: $subdir_name/$filename"
 
-    # ── 步骤 2：冲突检测 + 备份 ────────────────────────────────────
-    if [ -f "$target" ]; then
-        backup_file="$BACKUP_DIR/${filename%.md}.${TIMESTAMP}.bak.md"
-        if cp "$target" "$backup_file"; then
-            echo "  [BAK]  已备份原文件 -> $(basename "$backup_file")"
-            count_backup=$((count_backup + 1))
-        else
-            echo "  [SKIP] 备份失败，跳过该文件以防数据丢失: $filename" >&2
+        # ── 步骤 1：用 tldr -r 检查合法性 ──────────────────────────────
+        render_output=$(tldr -r "$f" 2>&1)
+        render_exit=$?
+
+        if [ $render_exit -ne 0 ]; then
+            echo "  [SKIP] 格式检查失败（exit $render_exit）"
+            echo "         原因: $render_output"
             count_invalid=$((count_invalid + 1))
             continue
         fi
-    fi
 
-    # ── 步骤 3：复制 ────────────────────────────────────────────────
-    if cp "$f" "$target"; then
-        echo "  [OK]   已同步到缓存"
-        count_ok=$((count_ok + 1))
-    else
-        echo "  [FAIL] 复制失败: $filename" >&2
-        count_invalid=$((count_invalid + 1))
-    fi
+        if [ -z "$render_output" ]; then
+            echo "  [SKIP] 渲染输出为空，文件可能缺少有效内容"
+            count_invalid=$((count_invalid + 1))
+            continue
+        fi
+
+        echo "  [OK]   格式检查通过"
+
+        # ── 步骤 2：冲突检测 + 备份 ────────────────────────────────────
+        if [ -f "$target" ]; then
+            backup_file="$BACKUP_DIR/${subdir_name}.${filename%.md}.${TIMESTAMP}.bak.md"
+            if cp "$target" "$backup_file"; then
+                echo "  [BAK]  已备份原文件 -> $(basename "$backup_file")"
+                count_backup=$((count_backup + 1))
+            else
+                echo "  [SKIP] 备份失败，跳过该文件以防数据丢失: $filename" >&2
+                count_invalid=$((count_invalid + 1))
+                continue
+            fi
+        fi
+
+        # ── 步骤 3：复制 ────────────────────────────────────────────────
+        if cp "$f" "$target"; then
+            echo "  [OK]   已同步到缓存"
+            count_ok=$((count_ok + 1))
+        else
+            echo "  [FAIL] 复制失败: $filename" >&2
+            count_invalid=$((count_invalid + 1))
+        fi
+    done
 done
 
 echo ""

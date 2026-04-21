@@ -47,3 +47,13 @@
 - `co` 接受自己的版本（diff 视图中）
 - `ct` 接受 AI 版本（diff 视图中）
 - `]x` / `[x` 跳转下/上个 diff hunk
+
+# fff — 文件查找器（替换 snacks 同名键位）
+
+- `<leader>ff` 模糊文件查找（fff.nvim，基于 LazyVim 项目根，带 frecency 学习）
+- `<leader>sg` live grep（fff.nvim，基于 LazyVim 项目根）
+- `<S-Tab>` 在 grep picker 中切换模式：plain / regex / fuzzy
+- `<Tab>` 多选，`<C-q>` 发送到 quickfix
+- `<C-s>` 横分打开，`<C-v>` 竖分打开，`<C-t>` 新 tab 打开
+- `<C-u>` / `<C-d>` 预览滚动
+- 其他 `<leader>f*` / `<leader>s*` 键位保持 snacks.picker（LSP/buffer/help/git/diagnostics 等）
